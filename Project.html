@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>D3.js Network Topology with Selectable Domains</title>
+    <style>
+        body { font-family: sans-serif; display: flex; height: 100vh; margin: 0; }
+        #controls { width: 300px; padding: 1rem; border-right: 1px solid #ccc; overflow-y: auto; }
+        #controls h2, #controls h3 { margin-top: 1rem; margin-bottom: 0.5rem; }
+        #topo { flex: 1; position: relative; }
+        svg { width: 100%; height: 100%; }
+
+        /* Node styling */
+        g.pc > circle     { fill: #f9c74f; }
+        g.hub > circle    { fill: #e63946; }
+        g.switch > circle { fill: #457b9d; }
+        g.router > circle { fill: #2a9d8f; }
+
+        .link { stroke: #999; stroke-opacity: .6; }
+        .node circle { stroke: #fff; stroke-width: 1.5px; }
+        .node text.id-label { pointer-events: none; font-size: 12px; }
+        .node text.delete { fill: #e63946; cursor: pointer; font-size: 14px; }
+
+        /* Domain overlay rects */
+        rect.domain-rect { fill-opacity: 0.1; stroke-width: 2px; rx: 8; ry: 8; }
+        rect.domain-rect.collision { fill: #e63946; stroke: #e63946; }
+        rect.domain-rect.broadcast { fill: #457b9d; stroke: #457b9d; }
+        text.domain-label { font-size: 14px; font-weight: bold; fill: #333; pointer-events: none; }
+
+        /* Domain list styling */
+        ul.domain-list { list-style: none; padding: 0; margin: 0; }
+        ul.domain-list li { cursor: pointer; padding: 4px 0; }
+        ul.domain-list li.selected { font-weight: bold; }
+    </style>
+</head>
+<body>
+<div id="controls">
+    <h2>Add Device</h2>
+    <label>Type:<br>
+        <select id="dev-type">
+            <option value="pc">PC</option>
+            <option value="hub">Hub</option>
+            <option value="switch">Switch</option>
+            <option value="router">Router</option>
+        </select>
+    </label>
+    <div id="dev-targets" style="margin: 0.5rem 0">
+        <strong>Connect to:</strong><br>
+    </div>
+    <button id="add-btn">Add</button>
+
+    <h3>Collision Domains</h3>
+    <ul id="collision-domain-list" class="domain-list"></ul>
+    <h3>Broadcast Domains</h3>
+    <ul id="broadcast-domain-list" class="domain-list"></ul>
+</div>
+<div id="topo">
+    <svg></svg>
+</div>
+
+<script src="https://d3js.org/d3.v6.min.js"></script>
+<script>
+    const allowedConnections = {
+        pc: ['switch','hub'],
+        hub: ['pc','switch','hub','router'],
+        switch: ['pc','hub','switch','router'],
+        router: ['switch','hub']
+    };
+    let selectedDomain = null;
+
+    const container = document.getElementById('topo');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    let nodes = [{ id: 'PC1', type: 'pc' }, { id: 'Switch1', type: 'switch' }];
+    let links = [{ source: 'PC1', target: 'Switch1' }];
+    let counter = { pc:2, hub:1, switch:2, router:1 };
+
+    const svg = d3.select('svg');
+    const domainGroup = svg.append('g').attr('class', 'domains');
+    const linkGroup = svg.append('g').attr('class','links');
+    const nodeGroup = svg.append('g').attr('class','nodes');
+
+    const simulation = d3.forceSimulation()
+        .force('link', d3.forceLink().id(d=>d.id).distance(120))
+        .force('charge', d3.forceManyBody().strength(-400))
+        .force('center', d3.forceCenter(width/2, height/2))
+        .force('collide', d3.forceCollide().radius(40));
+
+    function refreshTargets() {
+        const type = document.getElementById('dev-type').value;
+        const allowed = allowedConnections[type];
+        const container = document.getElementById('dev-targets');
+        container.innerHTML = '<strong>Connect to:</strong><br>' +
+            nodes.map(n => {
+                const ok = allowed.includes(n.type);
+                return `<label title="${ok ? 'OK' : 'Not allowed'}">
+            <input type="checkbox" value="${n.id}" ${ok ? '' : 'disabled'}>
+            ${n.id} (${n.type})
+          </label><br>`;
+            }).join('');
+    }
+    document.getElementById('dev-type').addEventListener('change', refreshTargets);
+    document.getElementById('add-btn').addEventListener('click', () => {
+        const type = document.getElementById('dev-type').value;
+        const id = type.charAt(0).toUpperCase() + type.slice(1) + (counter[type]++);
+        const checked = Array.from(
+            document.querySelectorAll('#dev-targets input:checked')
+        ).map(cb => cb.value);
+        if (!checked.length) return alert('Select at least one valid connection');
+        nodes.push({ id, type });
+        checked.forEach(t => links.push({ source: t, target: id }));
+        update();
+    });
+
+    function update() {
+        const link = linkGroup.selectAll('line').data(links, d=>d.source.id+'-'+d.target.id);
+        link.exit().remove();
+        link.enter().append('line').attr('class','link');
+
+        const node = nodeGroup.selectAll('g.node').data(nodes, d=>d.id);
+        node.exit().remove();
+        const enter = node.enter().append('g')
+            .attr('class', d=>'node '+d.type)
+            .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended));
+        enter.append('circle').attr('r',20);
+        enter.append('text')
+            .attr('class','id-label')
+            .attr('dy',30)
+            .attr('text-anchor','middle')
+            .text(d=>d.id);
+        enter.append('text')
+            .attr('class','delete')
+            .attr('dy',-25).attr('dx',15)
+            .text('×')
+            .on('click', (_,d) => {
+                nodes = nodes.filter(n=>n.id!==d.id);
+                links = links.filter(l=>l.source.id!==d.id && l.target.id!==d.id);
+                refreshTargets(); update();
+            });
+
+        simulation.nodes(nodes).on('tick', ticked);
+        simulation.force('link').links(links);
+        simulation.alpha(1).restart();
+        refreshTargets();
+    }
+
+    function ticked() {
+        drawDomains();
+        linkGroup.selectAll('line')
+            .attr('x1', d=>d.source.x).attr('y1', d=>d.source.y)
+            .attr('x2', d=>d.target.x).attr('y2', d=>d.target.y);
+        nodeGroup.selectAll('g.node')
+            .attr('transform', d=>`translate(${d.x},${d.y})`);
+    }
+
+    function drawDomains() {
+        const col = nodes.filter(n=>n.type==='hub').map((hub,i) => ({
+            type:'collision', name:`Collision Domain ${i+1}`, members:[hub,...links.filter(l=>l.source.id===hub.id).map(l=>l.target),...links.filter(l=>l.target.id===hub.id).map(l=>l.source)]
+        }));
+        const adj={}, seen=new Set(), groups=[];
+        nodes.forEach(n=>adj[n.id]=[]);
+        links.forEach(l=>{ adj[l.source.id].push(l.target.id); adj[l.target.id].push(l.source.id); });
+        nodes.forEach(n=>{
+            if(!seen.has(n.id) && n.type!=='router'){
+                const comp=[];
+                (function dfs(u){ seen.add(u); comp.push(nodes.find(x=>x.id===u)); adj[u].forEach(v=>{ if(!seen.has(v)&&nodes.find(x=>x.id===u).type!=='router') dfs(v); }); })(n.id);
+                groups.push(comp);
+            }
+        });
+        const bcast = groups.map((members,i) => ({
+            type:'broadcast', name:`Broadcast Domain ${i+1}`, members
+        }));
+        const domains = [...col, ...bcast];
+
+        // update lists
+        ['collision','broadcast'].forEach(type => {
+            const list = d3.select(`#${type}-domain-list`).selectAll('li').data(
+                domains.filter(d=>d.type===type), d=>d.name
+            );
+            list.exit().remove();
+            const enter = list.enter().append('li');
+            enter.merge(list)
+                .text(d=>d.name)
+                .on('click', (_,d)=>{ selectedDomain = (selectedDomain===d.name? null : d.name); drawDomains(); highlightList(); });
+        });
+        highlightList();
+
+        // overlay
+        const rects = domainGroup.selectAll('rect.domain-rect').data(domains.filter(d=>!selectedDomain||d.name===selectedDomain), d=>d.name);
+        rects.exit().remove();
+        rects.enter().insert('rect',':first-child').attr('class',d=>`domain-rect ${d.type}`)
+            .merge(rects).each(function(d){
+            const xs=d.members.map(n=>n.x), ys=d.members.map(n=>n.y);
+            const minX=Math.min(...xs)-30, maxX=Math.max(...xs)+30;
+            const minY=Math.min(...ys)-30, maxY=Math.max(...ys)+30;
+            d3.select(this).attr('x',minX).attr('y',minY).attr('width',maxX-minX).attr('height',maxY-minY);
+        });
+
+        // labels inside bottom-right of overlays
+        const labels = domainGroup.selectAll('text.domain-label')
+            .data(domains.filter(d=>!selectedDomain||d.name===selectedDomain), d=>d.name);
+        labels.exit().remove();
+        const lblEnter = labels.enter().append('text').attr('class','domain-label');
+        lblEnter.merge(labels).each(function(d) {
+            const xs = d.members.map(n=>n.x);
+            const ys = d.members.map(n=>n.y);
+            const maxX = Math.max(...xs) + 30;  // overlay padding
+            const maxY = Math.max(...ys) + 30;
+            const paddingX = 10;
+            const paddingY = 10;
+            d3.select(this)
+                .attr('x', maxX - paddingX)
+                .attr('y', maxY - paddingY)
+                .attr('text-anchor', 'end')
+                .text(d.name);
+        });
+    }
+
+    function highlightList() {
+        d3.selectAll('#collision-domain-list li, #broadcast-domain-list li')
+            .classed('selected', d=>d.name===selectedDomain);
+    }
+
+    function dragstarted(event,d){ if(!event.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; }
+    function dragged(event,d){ d.fx=event.x; d.fy=event.y; }
+    function dragended(event,d){ if(!event.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; }
+
+    // initialize
+    refreshTargets(); update();
+</script>
+</body>
+</html>
