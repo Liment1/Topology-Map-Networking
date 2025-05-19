@@ -100,7 +100,7 @@
             nodes.map(n => {
                 const ok = allowed.includes(n.type);
                 return `<label title=\"${ok ? 'OK' : 'Not allowed'}\">` +
-                    `<input type=\"checkbox\" value=\"${n.id}\" ${ok ? '' : 'disabled'} /> ` +
+                    `<input type=\"checkbox\" value=\"${n.id}\" ${ok ? '' : ''} /> ` +
                     `${n.id} (${n.type})` +
                     `</label>`;
             }).join('');
