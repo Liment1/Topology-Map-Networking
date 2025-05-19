@@ -7,24 +7,15 @@
         body { font-family: sans-serif; display: flex; height: 100vh; margin: 0; }
         #controls { width: 300px; padding: 1rem; border-right: 1px solid #ccc; overflow-y: auto; background-color: #f4f4f4; }
         #controls h2, #controls h3 { margin-top: 1rem; margin-bottom: 0.5rem; color: #333; font-family: Arial, sans-serif; }
-
-        /* Form elements */
         #controls label { display: block; margin-bottom: 0.25rem; font-size: 14px; color: #444; }
-        #controls select, #controls button { box-sizing: border-box; }
         #controls select { width: 100%; padding: 8px 10px; margin-top: 4px; border: 1px solid #bbb; border-radius: 4px; font-size: 14px; }
         #controls input[type="checkbox"] { margin-right: 8px; transform: scale(1.1); }
-
-        /* Add button */
         #controls button { width: 100%; padding: 10px; margin-top: 0.5rem; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
         #controls button:hover { background: #0069d9; }
-
-        /* Domain lists */
         ul.domain-list { list-style: none; padding: 0; margin: 0; font-size: 14px; }
         ul.domain-list li { cursor: pointer; padding: 6px 8px; border-radius: 4px; color: #333; }
         ul.domain-list li:hover { background-color: #e2e6ea; }
         ul.domain-list li.selected { font-weight: bold; background-color: #ced4da; }
-
-        /* Graph styling */
         #topo { flex: 1; position: relative; }
         svg { width: 100%; height: 100%; }
         g.pc > circle     { fill: #f9c74f; }
@@ -53,9 +44,8 @@
         </select>
     </label>
     <div id="dev-targets" style="margin: 0.5rem 0">
-        <strong>Connect to:</strong><br>
+        <strong>Connect to:</strong>
     </div>
-    <br>
     <button id="add-btn">Add</button>
 
     <h3>Collision Domains</h3>
@@ -75,7 +65,6 @@
         switch: ['pc','hub','switch','router'],
         router: ['switch','hub']
     };
-    // Icon URLs updated for switch and hub
     const ICON_URLS = {
         pc: 'https://img.icons8.com/emoji/48/000000/laptop-emoji.png',
         hub: './hub.png',
@@ -107,25 +96,28 @@
         const type = document.getElementById('dev-type').value;
         const allowed = allowedConnections[type];
         const container = document.getElementById('dev-targets');
-        container.innerHTML = '<strong>Connect to:</strong><br>' +
+        container.innerHTML = '<strong>Connect to:</strong>' +
             nodes.map(n => {
                 const ok = allowed.includes(n.type);
-                return `<label title="${ok ? 'OK' : 'Not allowed'}">
-            <input type="checkbox" value="${n.id}" ${ok ? '' : 'disabled'}>
-            ${n.id} (${n.type})
-          </label>`;
+                return `<label title=\"${ok ? 'OK' : 'Not allowed'}\">` +
+                    `<input type=\"checkbox\" value=\"${n.id}\" ${ok ? '' : 'disabled'} /> ` +
+                    `${n.id} (${n.type})` +
+                    `</label>`;
             }).join('');
     }
     document.getElementById('dev-type').addEventListener('change', refreshTargets);
+
     document.getElementById('add-btn').addEventListener('click', () => {
         const type = document.getElementById('dev-type').value;
         const id = type.charAt(0).toUpperCase() + type.slice(1) + (counter[type]++);
-        const checked = Array.from(
-            document.querySelectorAll('#dev-targets input:checked')
-        ).map(cb => cb.value);
-        if (!checked.length) return alert('Select at least one valid connection');
-        nodes.push({ id, type });
-        checked.forEach(t => links.push({ source: t, target: id }));
+        const checked = Array.from(document.querySelectorAll('#dev-targets input:checked')).map(cb => cb.value);
+        if (nodes.length === 0) {
+            nodes.push({ id, type });
+        } else {
+            if (!checked.length) { alert('Select at least one valid connection'); return; }
+            nodes.push({ id, type });
+            checked.forEach(t => links.push({ source: t, target: id }));
+        }
         update();
     });
 
@@ -139,35 +131,15 @@
         const enter = node.enter().append('g')
             .attr('class', d=>'node '+d.type)
             .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended));
-        // replace circle with device icon
         enter.append('image')
-            .attr('xlink:href', d => {
-                return {
-                    pc: 'https://img.icons8.com/emoji/48/000000/laptop-emoji.png',
-                    hub: './hub.png',
-                    switch: './server-control.png',
-                    router: 'https://img.icons8.com/color/48/000000/router.png'
-                }[d.type];
-            })
-            .attr('width', 40)
-            .attr('height', 40)
-            .attr('x', -20)
-            .attr('y', -20);
-        // node label below icon
+            .attr('xlink:href', d => ICON_URLS[d.type])
+            .attr('width', 40).attr('height', 40).attr('x', -20).attr('y', -20);
         enter.append('text')
-            .attr('class','id-label')
-            .attr('dy',30)
-            .attr('text-anchor','middle')
+            .attr('class','id-label').attr('dy',30).attr('text-anchor','middle')
             .text(d=>d.id);
         enter.append('text')
-            .attr('class','delete')
-            .attr('dy',-25).attr('dx',15)
-            .text('×')
-            .on('click', (_,d) => {
-                nodes = nodes.filter(n=>n.id!==d.id);
-                links = links.filter(l=>l.source.id!==d.id && l.target.id!==d.id);
-                refreshTargets(); update();
-            });
+            .attr('class','delete').attr('dy',-25).attr('dx',15).text('×')
+            .on('click', (_,d) => { nodes = nodes.filter(n=>n.id!==d.id); links = links.filter(l=>l.source.id!==d.id && l.target.id!==d.id); refreshTargets(); update(); });
 
         simulation.nodes(nodes).on('tick', ticked);
         simulation.force('link').links(links);
@@ -185,66 +157,39 @@
     }
 
     function drawDomains() {
-        const col = nodes.filter(n=>n.type==='hub').map((hub,i) => ({
-            type:'collision', name:`Collision Domain ${i+1}`, members:[hub,...links.filter(l=>l.source.id===hub.id).map(l=>l.target),...links.filter(l=>l.target.id===hub.id).map(l=>l.source)]
-        }));
+        const col = nodes.filter(n=>n.type==='hub').map((hub,i) => {
+            let members = [hub, ...links.filter(l=>l.source.id===hub.id).map(l=>l.target), ...links.filter(l=>l.target.id===hub.id).map(l=>l.source)];
+            members = members.filter(n=>n.type!=='router');
+            return { type:'collision', name:`Collision Domain ${i+1}`, members };
+        });
         const adj={}, seen=new Set(), groups=[];
         nodes.forEach(n=>adj[n.id]=[]);
         links.forEach(l=>{ adj[l.source.id].push(l.target.id); adj[l.target.id].push(l.source.id); });
-        nodes.forEach(n=>{
-            if(!seen.has(n.id) && n.type!=='router'){
-                const comp=[];
-                (function dfs(u){ seen.add(u); comp.push(nodes.find(x=>x.id===u)); adj[u].forEach(v=>{ if(!seen.has(v)&&nodes.find(x=>x.id===u).type!=='router') dfs(v); }); })(n.id);
-                groups.push(comp);
-            }
-        });
-        const bcast = groups.map((members,i) => ({
-            type:'broadcast', name:`Broadcast Domain ${i+1}`, members
-        }));
-        const domains = [...col, ...bcast];
+        nodes.forEach(n=>{ if(!seen.has(n.id) && n.type!=='router'){ const comp=[]; (function dfs(u){ seen.add(u); comp.push(nodes.find(x=>x.id===u)); adj[u].forEach(v=>{ if(!seen.has(v)&&nodes.find(x=>x.id===u).type!=='router') dfs(v); }); })(n.id); const members=comp.filter(n=>n.type!=='router'); groups.push(members); }});
+        const bcast = groups.map((members,i)=>({ type:'broadcast', name:`Broadcast Domain ${i+1}`, members }));
+        const domains=[...col,...bcast];
 
-        // update lists
-        ['collision','broadcast'].forEach(type => {
+        ['collision','broadcast'].forEach(type=>{
             const list = d3.select(`#${type}-domain-list`).selectAll('li').data(
                 domains.filter(d=>d.type===type), d=>d.name
             );
             list.exit().remove();
-            const enter = list.enter().append('li');
-            enter.merge(list)
+            const enterList = list.enter().append('li');
+            enterList.merge(list)
                 .text(d=>d.name)
-                .on('click', (_,d)=>{ selectedDomain = (selectedDomain===d.name? null : d.name); drawDomains(); highlightList(); });
+                .on('click', (_,d)=>{ selectedDomain=(selectedDomain===d.name?null:d.name); drawDomains(); highlightList(); });
         });
         highlightList();
 
-        // overlay
         const rects = domainGroup.selectAll('rect.domain-rect').data(domains.filter(d=>!selectedDomain||d.name===selectedDomain), d=>d.name);
         rects.exit().remove();
         rects.enter().insert('rect',':first-child').attr('class',d=>`domain-rect ${d.type}`)
-            .merge(rects).each(function(d){
-            const xs=d.members.map(n=>n.x), ys=d.members.map(n=>n.y);
-            const minX=Math.min(...xs)-30, maxX=Math.max(...xs)+30;
-            const minY=Math.min(...ys)-30, maxY=Math.max(...ys)+30;
-            d3.select(this).attr('x',minX).attr('y',minY).attr('width',maxX-minX).attr('height',maxY-minY);
-        });
+            .merge(rects).each(function(d){ const xs=d.members.map(n=>n.x), ys=d.members.map(n=>n.y); const minX=Math.min(...xs)-30, maxX=Math.max(...xs)+30; const minY=Math.min(...ys)-30, maxY=Math.max(...ys)+30; d3.select(this).attr('x',minX).attr('y',minY).attr('width',maxX-minX).attr('height',maxY-minY); });
 
-        // labels inside bottom-right of overlays
-        const labels = domainGroup.selectAll('text.domain-label')
-            .data(domains.filter(d=>!selectedDomain||d.name===selectedDomain), d=>d.name);
+        const labels = domainGroup.selectAll('text.domain-label').data(domains.filter(d=>!selectedDomain||d.name===selectedDomain), d=>d.name);
         labels.exit().remove();
         const lblEnter = labels.enter().append('text').attr('class','domain-label');
-        lblEnter.merge(labels).each(function(d) {
-            const xs = d.members.map(n=>n.x);
-            const ys = d.members.map(n=>n.y);
-            const maxX = Math.max(...xs) + 30;  // overlay padding
-            const maxY = Math.max(...ys) + 30;
-            const paddingX = 10;
-            const paddingY = 10;
-            d3.select(this)
-                .attr('x', maxX - paddingX)
-                .attr('y', maxY - paddingY)
-                .attr('text-anchor', 'end')
-                .text(d.name);
-        });
+        lblEnter.merge(labels).each(function(d){ const xs=d.members.map(n=>n.x), ys=d.members.map(n=>n.y); const maxX=Math.max(...xs)+30, maxY=Math.max(...ys)+30; d3.select(this).attr('x',maxX-10).attr('y',maxY-10).attr('text-anchor','end').text(d.name); });
     }
 
     function highlightList() {
@@ -256,7 +201,6 @@
     function dragged(event,d){ d.fx=event.x; d.fy=event.y; }
     function dragended(event,d){ if(!event.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; }
 
-    // initialize
     refreshTargets(); update();
 </script>
 </body>
