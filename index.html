@@ -5,37 +5,44 @@
     <title>D3.js Network Topology with Selectable Domains</title>
     <style>
         body { font-family: sans-serif; display: flex; height: 100vh; margin: 0; }
-        #controls { width: 300px; padding: 1rem; border-right: 1px solid #ccc; overflow-y: auto; background-color: #f4f4f4; }
-        #controls h2, #controls h3 { margin-top: 1rem; margin-bottom: 0.5rem; color: #333; font-family: Arial, sans-serif; }
+        #controls { width: 300px; padding: 1rem; border-right: 1px solid #ccc; overflow-y: auto; background-color: #f4f4f4; position: relative; }
+        #controls h2, #controls h3, #controls h4 { margin-top: 1rem; margin-bottom: 0.5rem; color: #333; cursor: pointer; }
         #controls label { display: block; margin-bottom: 0.25rem; font-size: 14px; color: #444; }
-        #controls select { width: 100%; padding: 8px 10px; margin-top: 4px; border: 1px solid #bbb; border-radius: 4px; font-size: 14px; }
-        #controls input[type="checkbox"] { margin-right: 8px; transform: scale(1.1); }
-        #controls button { width: 100%; padding: 10px; margin-top: 0.5rem; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-        #controls button:hover { background: #0069d9; }
-        ul.domain-list { list-style: none; padding: 0; margin: 0; font-size: 14px; }
-        ul.domain-list li { cursor: pointer; padding: 6px 8px; border-radius: 4px; color: #333; }
-        ul.domain-list li:hover { background-color: #e2e6ea; }
-        ul.domain-list li.selected { font-weight: bold; background-color: #ced4da; }
-        #topo { flex: 1; position: relative; }
+        #controls select { width: 100%; padding: 8px 10px; margin-top: 4px; border: 1px solid #bbb; border-radius: 4px; }
+        #controls input[type="checkbox"] { margin-right: 8px; }
+        #controls button { width: 100%; padding: 8px; margin-top: 8px; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        #controls button:hover { background: #0056b3; }
+        ul.domain-list { list-style: none; padding: 0; margin: 0; }
+        ul.domain-list li { cursor: pointer; padding: 4px; border: 1px solid transparent; border-radius: 4px; }
+        ul.domain-list li.selected { border-color: #007bff; background-color: #e6f0ff; }
+        ul.domain-list li .domain-header { display: flex; align-items: center; }
+        ul.domain-list li .arrow { margin-right: 5px; transition: transform 0.2s; }
+        ul.domain-list li.open .arrow { transform: rotate(180deg); }
+        ul.domain-list li .member-list { list-style: none; padding-left: 1.5rem; margin: 4px 0; }
+        ul.domain-list li .member-list li { padding: 2px 0; }
+        #information { margin-top: 1rem; }
+        #info-dropdown.hidden { display: none; }
+        #made-by { bottom: 1rem; font-size: 12px; color: #666; }
+        #topo { flex: 1; display: flex; flex-direction: column; }
+        #map-dropdown { flex: 1; display: flex; }
         svg { width: 100%; height: 100%; }
-        g.pc > circle     { fill: #f9c74f; }
-        g.hub > circle    { fill: #e63946; }
-        g.switch > circle { fill: #457b9d; }
-        g.router > circle { fill: #2a9d8f; }
-        .link { stroke: #999; stroke-opacity: .6; }
-        .node circle { stroke: #fff; stroke-width: 1.5px; }
-        .node text.id-label { pointer-events: none; font-size: 12px; fill: #222; }
-        .node text.delete { fill: #e63946; cursor: pointer; font-size: 14px; }
-        rect.domain-rect { fill-opacity: 0.1; stroke-width: 2px; rx: 8; ry: 8; }
+        .link { stroke: #999; stroke-width: 2px; }
+        text.id-label { font-size: 12px; text-anchor: middle; pointer-events: none; }
+        .delete-icon { font-size: 14px; fill: #e63946; pointer-events: all; cursor: pointer; }
+        rect.domain-rect { fill-opacity: 0.1; stroke-width: 2px; }
         rect.domain-rect.collision { fill: #e63946; stroke: #e63946; }
         rect.domain-rect.broadcast { fill: #457b9d; stroke: #457b9d; }
-        text.domain-label { font-size: 14px; font-weight: bold; fill: #333; pointer-events: none; }
+        rect.domain-rect.selected { stroke-width: 4px; fill-opacity: 0.2; }
+        text.domain-label { font-size: 14px; pointer-events: none; }
+        text.domain-label.selected { font-weight: bold; fill: #000; }
+        rect.domain-rect.dimmed { opacity: 0.3; }
+        text.domain-label.dimmed { fill: #999; }
     </style>
 </head>
 <body>
 <div id="controls">
     <h2>Add Device</h2>
-    <label>Type:<br>
+    <label>Type:
         <select id="dev-type">
             <option value="pc">PC</option>
             <option value="hub">Hub</option>
@@ -43,165 +50,458 @@
             <option value="router">Router</option>
         </select>
     </label>
-    <div id="dev-targets" style="margin: 0.5rem 0">
-        <strong>Connect to:</strong>
-    </div>
+    <div id="dev-targets"><strong>Connect to:</strong></div>
     <button id="add-btn">Add</button>
-
-    <h3>Collision Domains</h3>
-    <ul id="collision-domain-list" class="domain-list"></ul>
-    <h3>Broadcast Domains</h3>
+    <h3 id="collision-title">Collision Domains</h3>
+    <ul id="collision-domain-list" class="domain-list hidden"></ul>
+    <h3 id="broadcast-title">Broadcast Domains</h3>
     <ul id="broadcast-domain-list" class="domain-list"></ul>
+    <div id="information">
+        <h4 id="info-header">Information</h4>
+        <div id="info-dropdown">
+            <h5>Collision Domain</h5>
+            <p id="collision-desc">A Collision Domain is a scenario in which when a device sends out a message to the network, all other devices which are included in its collision domain have to pay attention to it, no matter if it was destined for them or not. </p>
+            <h5>Broadcast Domain</h5>
+            <p id="broadcast-desc">A Broadcast Domain is a scenario in which when a device sends out a broadcast message, all the devices present in its broadcast domain have to pay attention to it. </p>
+            <h5>Hub</h5>
+            <p id="hub-desc">A hub is neither a collision domain separator nor a broadcast domain separator. All the devices connected to a hub are in a single collision and single broadcast domain.  </p>
+            <h5>Switch</h5>
+            <p id="switch-desc">Every port on a switch is in a different collision domain, i.e a switch is a collision domain separator. So messages that come from devices connected to different ports never experience a collision. </p>
+            <h5>Router</h5>
+            <p id="router-desc"> A router not only breaks collision domains but also breaks broadcast domains, which means it is both collisions as well as broadcast domain separators.</p>
+        </div>
+    </div>
+    <div id="made-by">made by Welliam</div>
 </div>
 <div id="topo">
-    <svg></svg>
+    <h4 id="map-header">Topology Map</h4>
+    <div id="map-dropdown"><svg></svg></div>
 </div>
-
 <script src="https://d3js.org/d3.v6.min.js"></script>
 <script>
-    const allowedConnections = {
-        pc: ['switch','hub'],
-        hub: ['pc','switch','hub','router'],
-        switch: ['pc','hub','switch','router'],
-        router: ['switch','hub']
-    };
+    function refreshTargets() {
+        const container = document.getElementById('dev-targets');
+        const newType = document.getElementById('dev-type').value;
+        container.innerHTML = '<strong>Connect to:</strong>' +
+            nodes.map(n => {
+                const disabled = newType === 'pc' && n.type === 'pc' ? 'disabled' : '';
+                return `<label><input type="checkbox" value="${n.id}" ${disabled}> ${n.id} (${n.type})</label>`;
+            }).join('');
+    }
+
+    function collisionDomains() {
+        const domains = [];
+        const adj = {};
+        const seenKeys = new Set();
+        const baseMembers = new Set();
+
+        // 1) build adjacency
+        nodes.forEach(n => adj[n.id] = []);
+        links.forEach(l => {
+            const a = typeof l.source === 'object' ? l.source.id : l.source;
+            const b = typeof l.target === 'object' ? l.target.id : l.target;
+            adj[a].push(b);
+            adj[b].push(a);
+        });
+
+        // 2) BFS over PCs & Hubs only
+        function gatherPCHub(startId) {
+            const comp = new Set([startId]), q = [startId];
+            while (q.length) {
+                const u = q.shift();
+                adj[u].forEach(v => {
+                    const t = nodes.find(n => n.id === v).type;
+                    if ((t === 'pc' || t === 'hub') && !comp.has(v)) {
+                        comp.add(v);
+                        q.push(v);
+                    }
+                });
+            }
+            return Array.from(comp).map(id => nodes.find(n => n.id === id));
+        }
+
+        // 3) cluster PC+Hub segments or singleton PC/Hub with ≥2 links
+        const visited = new Set();
+        nodes.filter(n => n.type==='pc'||n.type==='hub').forEach(n => {
+            if (visited.has(n.id)) return;
+            const comp = gatherPCHub(n.id);
+            comp.forEach(x => visited.add(x.id));
+            const isHighDeg = comp.length===1 && adj[n.id].length>=2;
+            if (comp.length>1 || isHighDeg) {
+                comp.forEach(x => baseMembers.add(x.id));
+                const key = comp.map(x=>x.id).sort().join(',');
+                seenKeys.add(key);
+                domains.push({ type:'collision', members: comp.slice() });
+            }
+        });
+
+        // 4) attach direct switch/router neighbors
+        nodes.filter(n=>n.type==='switch'||n.type==='router').forEach(dev => {
+            adj[dev.id].forEach(nbrId => {
+                if (!baseMembers.has(nbrId)) return;
+                const dom = domains.find(d=>d.members.some(m=>m.id===nbrId));
+                if (dom && !dom.members.find(m=>m.id===dev.id)) {
+                    dom.members.push(dev);
+                }
+            });
+        });
+
+        // 5) fallback per-link domains
+        links.forEach(l => {
+            const a = typeof l.source==='object'?l.source.id:l.source;
+            const b = typeof l.target==='object'?l.target.id:l.target;
+            const key = [a,b].sort().join(',');
+            if (!seenKeys.has(key)) {
+                seenKeys.add(key);
+                domains.push({
+                    type:'collision',
+                    members:[ nodes.find(n=>n.id===a), nodes.find(n=>n.id===b) ]
+                });
+            }
+        });
+
+        // 6) normalize & prune
+        domains.forEach(d => {
+            d.members = Array.from(
+                new Map(d.members.map(m=>[m.id,m])).values()
+            ).sort((a,b)=>a.id.localeCompare(b.id));
+        });
+        const pruned = domains.filter((d,i) => {
+            return !domains.some((o,j) => {
+                if (i===j || d.type!==o.type) return false;
+                // prune PC/Hub–X 2-node if PC/Hub had ≥2 links
+                if (d.members.length===2) {
+                    const [m1,m2] = d.members;
+                    if ((m1.type==='pc'||m1.type==='hub') && adj[m1.id].length>=2) return true;
+                    if ((m2.type==='pc'||m2.type==='hub') && adj[m2.id].length>=2) return true;
+                    // otherwise keep all pure switch–switch, switch–router, router–router
+                    return false;
+                }
+                // prune strict subsets
+                const ids = d.members.map(m=>m.id), oids = o.members.map(m=>m.id);
+                return oids.length>ids.length && ids.every(id=>oids.includes(id));
+            });
+        });
+
+        // 7) rename
+        pruned.forEach((d,i) => d.name = `Collision Domain ${i+1}`);
+        return pruned;
+    }
+
+    function broadcastDomains() {
+        const domains = [];
+        const adj = {};
+        const seenKeys = new Set();
+        const baseMembers = new Set();
+
+        // 1) build adjacency
+        nodes.forEach(n => adj[n.id] = []);
+        links.forEach(l => {
+            const a = typeof l.source === 'object' ? l.source.id : l.source;
+            const b = typeof l.target === 'object' ? l.target.id : l.target;
+            adj[a].push(b);
+            adj[b].push(a);
+        });
+
+        // 2) BFS over PCs, Hubs & Switches (stop at routers)
+        function gatherSegment(startId) {
+            const comp = new Set([startId]), q = [startId];
+            while (q.length) {
+                const u = q.shift();
+                adj[u].forEach(v => {
+                    const t = nodes.find(n => n.id === v).type;
+                    if (t !== 'router' && !comp.has(v)) {
+                        comp.add(v);
+                        q.push(v);
+                    }
+                });
+            }
+            return Array.from(comp).map(id => nodes.find(n => n.id === id));
+        }
+
+        // 3) cluster multi-node segments or singleton with ≥2 links
+        const visited = new Set();
+        nodes
+            .filter(n => n.type !== 'router')
+            .forEach(n => {
+                if (visited.has(n.id)) return;
+                const comp = gatherSegment(n.id);
+                comp.forEach(x => visited.add(x.id));
+                const isHighDeg = comp.length === 1 && adj[n.id].length >= 2;
+                if (comp.length > 1 || isHighDeg) {
+                    comp.forEach(x => baseMembers.add(x.id));
+                    const key = comp.map(x => x.id).sort().join(',');
+                    seenKeys.add(key);
+                    domains.push({ type:'broadcast', members: comp.slice() });
+                }
+            });
+
+        // 4) attach routers one hop from baseMembers
+        nodes
+            .filter(n => n.type === 'router')
+            .forEach(r => {
+                adj[r.id].forEach(nbrId => {
+                    if (!baseMembers.has(nbrId)) return;
+                    const dom = domains.find(d => d.members.some(m => m.id === nbrId));
+                    if (dom && !dom.members.find(m => m.id === r.id)) {
+                        dom.members.push(r);
+                    }
+                });
+            });
+
+        // 5) fallback per-link for router–router and router–X
+        links.forEach(l => {
+            const a = typeof l.source==='object'?l.source.id:l.source;
+            const b = typeof l.target==='object'?l.target.id:l.target;
+            const tA = nodes.find(n=>n.id===a).type;
+            const tB = nodes.find(n=>n.id===b).type;
+            // only emit if at least one end is router
+            if (tA !== 'router' && tB !== 'router') return;
+            const key = [a,b].sort().join(',');
+            if (!seenKeys.has(key)) {
+                seenKeys.add(key);
+                domains.push({
+                    type:'broadcast',
+                    members:[ nodes.find(n=>n.id===a), nodes.find(n=>n.id===b) ]
+                });
+            }
+        });
+
+        // 6) normalize & prune strict subsets, but remove any 2-node PC/Hub/SW–router link when that non-router has ≥2 links
+        domains.forEach(d => {
+            d.members = Array.from(
+                new Map(d.members.map(m=>[m.id,m])).values()
+            ).sort((a,b)=>a.id.localeCompare(b.id));
+        });
+        const pruned = domains.filter((d,i) =>
+            !domains.some((o,j) => {
+                if (i===j || d.type!==o.type) return false;
+                // prune 2-node [X,router] if X≠router and adj[X].length≥2
+                if (d.members.length===2) {
+                    const [m1,m2] = d.members;
+                    if (m1.type==='router' && m2.type!=='router' && adj[m2.id].length>=2) return true;
+                    if (m2.type==='router' && m1.type!=='router' && adj[m1.id].length>=2) return true;
+                    // keep pure router-router
+                    if (m1.type==='router' && m2.type==='router') return false;
+                }
+                // prune strict subset
+                const ids = d.members.map(m=>m.id), oids = o.members.map(m=>m.id);
+                return oids.length>ids.length && ids.every(id=>oids.includes(id));
+            })
+        );
+
+        // 7) rename
+        pruned.forEach((d,i)=> d.name = `Broadcast Domain ${i+1}`);
+        return pruned;
+    }
+
+
     const ICON_URLS = {
         pc: 'https://img.icons8.com/emoji/48/000000/laptop-emoji.png',
-        hub: './hub.png',
-        switch: './server-control.png',
+        hub: './Src/img/hub.png',
+        switch: './Src/img/switch.png',
         router: 'https://img.icons8.com/color/48/000000/router.png'
     };
     let selectedDomain = null;
-
-    const container = document.getElementById('topo');
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
     let nodes = [{ id: 'PC1', type: 'pc' }, { id: 'Switch1', type: 'switch' }];
     let links = [{ source: 'PC1', target: 'Switch1' }];
-    let counter = { pc:2, hub:1, switch:2, router:1 };
+    let counter = { pc: 2, hub: 1, switch: 2, router: 1 };
 
     const svg = d3.select('svg');
-    const domainGroup = svg.append('g').attr('class', 'domains');
-    const linkGroup = svg.append('g').attr('class','links');
-    const nodeGroup = svg.append('g').attr('class','nodes');
-
-    const simulation = d3.forceSimulation()
-        .force('link', d3.forceLink().id(d=>d.id).distance(120))
-        .force('charge', d3.forceManyBody().strength(-400))
-        .force('center', d3.forceCenter(width/2, height/2))
+    const domainGroup = svg.append('g');
+    const linkGroup = svg.append('g');
+    const nodeGroup = svg.append('g');
+    const width = +svg.node().clientWidth;
+    const height = +svg.node().clientHeight;
+    const simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(120))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
         .force('collide', d3.forceCollide().radius(40));
 
-    function refreshTargets() {
-        const type = document.getElementById('dev-type').value;
-        const allowed = allowedConnections[type];
-        const container = document.getElementById('dev-targets');
-        container.innerHTML = '<strong>Connect to:</strong>' +
-            nodes.map(n => {
-                const ok = allowed.includes(n.type);
-                return `<label title=\"${ok ? 'OK' : 'Not allowed'}\">` +
-                    `<input type=\"checkbox\" value=\"${n.id}\" ${ok ? '' : ''} /> ` +
-                    `${n.id} (${n.type})` +
-                    `</label>`;
-            }).join('');
+    simulation.alphaDecay(0.2);
+    simulation.alphaMin(0.1);
+
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
     }
-    document.getElementById('dev-type').addEventListener('change', refreshTargets);
 
-    document.getElementById('add-btn').addEventListener('click', () => {
-        const type = document.getElementById('dev-type').value;
-        const id = type.charAt(0).toUpperCase() + type.slice(1) + (counter[type]++);
-        const checked = Array.from(document.querySelectorAll('#dev-targets input:checked')).map(cb => cb.value);
-        if (nodes.length === 0) {
-            nodes.push({ id, type });
-        } else {
-            if (!checked.length) { alert('Select at least one valid connection'); return; }
-            nodes.push({ id, type });
-            checked.forEach(t => links.push({ source: t, target: id }));
-        }
-        update();
-    });
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
 
-    function update() {
-        const link = linkGroup.selectAll('line').data(links, d=>d.source.id+'-'+d.target.id);
-        link.exit().remove();
-        link.enter().append('line').attr('class','link');
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
 
-        const node = nodeGroup.selectAll('g.node').data(nodes, d=>d.id);
-        node.exit().remove();
-        const enter = node.enter().append('g')
-            .attr('class', d=>'node '+d.type)
-            .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended));
-        enter.append('image')
-            .attr('xlink:href', d => ICON_URLS[d.type])
-            .attr('width', 40).attr('height', 40).attr('x', -20).attr('y', -20);
-        enter.append('text')
-            .attr('class','id-label').attr('dy',30).attr('text-anchor','middle')
-            .text(d=>d.id);
-        enter.append('text')
-            .attr('class','delete').attr('dy',-25).attr('dx',15).text('×')
-            .on('click', (_,d) => { nodes = nodes.filter(n=>n.id!==d.id); links = links.filter(l=>l.source.id!==d.id && l.target.id!==d.id); refreshTargets(); update(); });
 
+    function draw() {
+        linkGroup.selectAll('line').data(links).join('line').attr('class','link');
+
+        nodeGroup.selectAll('g').data(nodes, d => d.id).join(
+            enter => {
+                const g = enter.append('g')
+                    .call(d3.drag()
+                        .on('start', dragstarted)
+                        .on('drag', dragged)
+                        .on('end', dragended)
+                    );
+                g.append('image').attr('href', d => ICON_URLS[d.type]).attr('width', 40).attr('height', 40).attr('x', -20).attr('y', -20);
+                g.append('text').attr('class','id-label').attr('dy',30).text(d=>d.id);
+                g.append('text').attr('class','delete-icon').attr('x',20).attr('y',-20)
+                    .text('×')
+                    .on('click', (e,d) => {
+                        nodes = nodes.filter(n => n.id !== d.id);
+                        links = links.filter(l => {
+                            const s = typeof l.source === 'object' ? l.source.id : l.source;
+                            const t = typeof l.target === 'object' ? l.target.id : l.target;
+                            return s !== d.id && t !== d.id;
+                        });
+                        refreshTargets();
+                        draw();
+                    });
+                return g;
+            }
+        );
         simulation.nodes(nodes).on('tick', ticked);
         simulation.force('link').links(links);
         simulation.alpha(1).restart();
-        refreshTargets();
     }
 
+    document.getElementById('collision-title').onclick = () => { const list = document.getElementById('collision-domain-list'); list.style.display = list.style.display === 'none' ? 'block' : 'none'; };
+    document.getElementById('broadcast-title').onclick = () => { const list = document.getElementById('broadcast-domain-list'); list.style.display = list.style.display === 'none' ? 'block' : 'none'; };
+    document.getElementById('info-header').onclick = () => { const dd = document.getElementById('info-dropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; };
+    document.getElementById('map-header').onclick = () => { const mp = document.getElementById('map-dropdown'); mp.style.display = mp.style.display === 'none' ? 'flex' : 'none'; };
+
     function ticked() {
-        drawDomains();
         linkGroup.selectAll('line')
-            .attr('x1', d=>d.source.x).attr('y1', d=>d.source.y)
-            .attr('x2', d=>d.target.x).attr('y2', d=>d.target.y);
-        nodeGroup.selectAll('g.node')
-            .attr('transform', d=>`translate(${d.x},${d.y})`);
+            .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        nodeGroup.selectAll('g').attr('transform', d => `translate(${d.x},${d.y})`);
+        drawDomains();
     }
 
     function drawDomains() {
-        const col = nodes.filter(n=>n.type==='hub').map((hub,i) => {
-            let members = [hub, ...links.filter(l=>l.source.id===hub.id).map(l=>l.target), ...links.filter(l=>l.target.id===hub.id).map(l=>l.source)];
-            members = members.filter(n=>n.type!=='router');
-            return { type:'collision', name:`Collision Domain ${i+1}`, members };
+        const cd = collisionDomains();
+        const bd = broadcastDomains();
+        document.getElementById('collision-title').textContent = `Collision Domains (Total = ${cd.length})`;
+        document.getElementById('broadcast-title').textContent = `Broadcast Domains (Total = ${bd.length})`;
+        const domains = [...cd, ...bd];
+
+        // 1) Compute _rectPoints for PC–Switch collision domains
+        domains.forEach(d => {
+            if (d.type === 'collision' && d.members.length === 2) {
+                const [A, B] = d.members;
+                if ((A.type === 'pc' && B.type === 'switch') || (A.type === 'switch' && B.type === 'pc')) {
+                    const pc = A.type === 'pc' ? A : B;
+                    const sw = A.type === 'switch' ? A : B;
+                    d._rectPoints = [
+                        { x: pc.x, y: pc.y },
+                        { x: (pc.x + sw.x) / 2, y: (pc.y + sw.y) / 2 }
+                    ];
+                }
+            }
         });
-        const adj={}, seen=new Set(), groups=[];
-        nodes.forEach(n=>adj[n.id]=[]);
-        links.forEach(l=>{ adj[l.source.id].push(l.target.id); adj[l.target.id].push(l.source.id); });
-        nodes.forEach(n=>{ if(!seen.has(n.id) && n.type!=='router'){ const comp=[]; (function dfs(u){ seen.add(u); comp.push(nodes.find(x=>x.id===u)); adj[u].forEach(v=>{ if(!seen.has(v)&&nodes.find(x=>x.id===u).type!=='router') dfs(v); }); })(n.id); const members=comp.filter(n=>n.type!=='router'); groups.push(members); }});
-        const bcast = groups.map((members,i)=>({ type:'broadcast', name:`Broadcast Domain ${i+1}`, members }));
-        const domains=[...col,...bcast];
 
-        ['collision','broadcast'].forEach(type=>{
-            const list = d3.select(`#${type}-domain-list`).selectAll('li').data(
-                domains.filter(d=>d.type===type), d=>d.name
-            );
-            list.exit().remove();
-            const enterList = list.enter().append('li');
-            enterList.merge(list)
-                .text(d=>d.name)
-                .on('click', (_,d)=>{ selectedDomain=(selectedDomain===d.name?null:d.name); drawDomains(); highlightList(); });
+        // 2) Render side‐bar lists
+        ['collision','broadcast'].forEach(type => {
+            const list = d3.select(`#${type}-domain-list`);
+            list.selectAll('*').remove();
+            (type === 'collision' ? cd : bd).forEach((d, i) => {
+                const li = list.append('li')
+                    .attr('id', `${type}-domain-${i+1}`)
+                    .classed('selected', d.name === selectedDomain)
+                    .classed('open',     d.name === selectedDomain)
+                    .on('click', () => {
+                        selectedDomain = d.name === selectedDomain ? null : d.name;
+                        draw();
+                    });
+                const arrow = d.name === selectedDomain ? '▼' : '▶';
+                li.html(
+                    `<div class="domain-header"><span class="arrow">${arrow}</span>` +
+                    `<span class="domain-label-text">${d.name} (devices = ${d.members.length})</span></div>` +
+                    `<ul class="member-list" style="display:${d.name === selectedDomain ? 'block' : 'none'}">` +
+                    `${d.members.map(m => `<li>${m.id}</li>`).join('')}</ul>`
+                );
+            });
         });
-        highlightList();
 
-        const rects = domainGroup.selectAll('rect.domain-rect').data(domains.filter(d=>!selectedDomain||d.name===selectedDomain), d=>d.name);
-        rects.exit().remove();
-        rects.enter().insert('rect',':first-child').attr('class',d=>`domain-rect ${d.type}`)
-            .merge(rects).each(function(d){ const xs=d.members.map(n=>n.x), ys=d.members.map(n=>n.y); const minX=Math.min(...xs)-30, maxX=Math.max(...xs)+30; const minY=Math.min(...ys)-30, maxY=Math.max(...ys)+30; d3.select(this).attr('x',minX).attr('y',minY).attr('width',maxX-minX).attr('height',maxY-minY); });
+        // 3) Draw rectangles with highlight/dim and custom points
+        domainGroup.selectAll('rect')
+            .data(domains, d => d.name)
+            .join(
+                enter => enter.append('rect'),
+                update => update,
+                exit   => exit.remove()
+            )
+            .attr('class', d =>
+                `domain-rect ${d.type}` +
+                (selectedDomain === null
+                        ? ''
+                        : d.name === selectedDomain
+                            ? ' selected'
+                            : ' dimmed'
+                )
+            )
+            .each(function(d) {
+                const pts = d._rectPoints
+                    ? d._rectPoints
+                    : d.members.map(n => ({ x: n.x, y: n.y }));
+                const xs = pts.map(p => p.x), ys = pts.map(p => p.y), pad = 30;
+                d3.select(this)
+                    .attr('x', Math.min(...xs) - pad)
+                    .attr('y', Math.min(...ys) - pad)
+                    .attr('width', Math.max(...xs) - Math.min(...xs) + pad * 2)
+                    .attr('height', Math.max(...ys) - Math.min(...ys) + pad * 2);
+            });
 
-        const labels = domainGroup.selectAll('text.domain-label').data(domains.filter(d=>!selectedDomain||d.name===selectedDomain), d=>d.name);
-        labels.exit().remove();
-        const lblEnter = labels.enter().append('text').attr('class','domain-label');
-        lblEnter.merge(labels).each(function(d){ const xs=d.members.map(n=>n.x), ys=d.members.map(n=>n.y); const maxX=Math.max(...xs)+30, maxY=Math.max(...ys)+30; d3.select(this).attr('x',maxX-10).attr('y',maxY-10).attr('text-anchor','end').text(d.name); });
+        // 4) Draw labels with highlight/dim and offset duplicates
+        const labelCount = {};
+        domainGroup.selectAll('text.domain-label')
+            .data(domains, d => d.name)
+            .join(
+                enter => enter.append('text'),
+                update => update,
+                exit   => exit.remove()
+            )
+            .attr('class', d =>
+                d.name === selectedDomain
+                    ? 'domain-label selected'
+                    : (selectedDomain === null
+                        ? 'domain-label'
+                        : 'domain-label dimmed')
+            )
+            .each(function(d) {
+                const baseX = Math.max(...d.members.map(n => n.x)) + 20;
+                const baseY = Math.max(...d.members.map(n => n.y)) + 20;
+                const key = `${Math.round(baseX)},${Math.round(baseY)}`;
+                const count = (labelCount[key] = (labelCount[key] || 0) + 1);
+                const offset = (count - 1) * 14;
+                d3.select(this)
+                    .attr('x', baseX + offset)
+                    .attr('y', baseY + offset)
+                    .text(d.name);
+            });
     }
 
-    function highlightList() {
-        d3.selectAll('#collision-domain-list li, #broadcast-domain-list li')
-            .classed('selected', d=>d.name===selectedDomain);
-    }
+    document.getElementById('dev-type').addEventListener('change',refreshTargets);
+    document.getElementById('add-btn').addEventListener('click', () => {
+        const type = document.getElementById('dev-type').value;
+        const id = type.charAt(0).toUpperCase() + type.slice(1) + counter[type]++;
+        const checked = Array.from(document.querySelectorAll('#dev-targets input:checked')).map(cb => cb.value);
+        nodes.push({ id, type });
+        checked.forEach(t => links.push({ source: t, target: id }));
+        refreshTargets();
+        draw();
+    });
 
-    function dragstarted(event,d){ if(!event.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; }
-    function dragged(event,d){ d.fx=event.x; d.fy=event.y; }
-    function dragended(event,d){ if(!event.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; }
-
-    refreshTargets(); update();
+    refreshTargets();
+    draw();
 </script>
 </body>
 </html>

@@ -1,0 +1,28 @@
+body { font-family: sans-serif; display: flex; height: 100vh; margin: 0; }
+#controls { width: 300px; padding: 1rem; border-right: 1px solid #ccc; overflow-y: auto; background-color: #f4f4f4; }
+#controls h2, #controls h3 { margin-top: 1rem; margin-bottom: 0.5rem; color: #333; font-family: Arial, sans-serif; }
+#controls label { display: block; margin-bottom: 0.25rem; font-size: 14px; color: #444; }
+#controls select { width: 100%; padding: 8px 10px; margin-top: 4px; border: 1px solid #bbb; border-radius: 4px; font-size: 14px; }
+#controls input[type="checkbox"] { margin-right: 8px; transform: scale(1.1); }
+#controls button { width: 100%; padding: 10px; margin-top: 0.5rem; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+#controls button:hover { background: #0069d9; }
+
+ul.domain-list { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+ul.domain-list li { cursor: pointer; padding: 6px 8px; border-radius: 4px; color: #333; }
+ul.domain-list li:hover { background-color: #e2e6ea; }
+ul.domain-list li.selected { font-weight: bold; background-color: #ced4da; }
+
+#topo { flex: 1; position: relative; }
+svg { width: 100%; height: 100%; }
+g.pc > circle     { fill: #f9c74f; }
+g.hub > circle    { fill: #e63946; }
+g.switch > circle { fill: #457b9d; }
+g.router > circle { fill: #2a9d8f; }
+.link { stroke: #999; stroke-opacity: .6; }
+.node circle { stroke: #fff; stroke-width: 1.5px; }
+.node text.id-label { pointer-events: none; font-size: 12px; fill: #222; }
+.node text.delete { fill: #e63946; cursor: pointer; font-size: 14px; }
+rect.domain-rect { fill-opacity: 0.1; stroke-width: 2px; rx: 8; ry: 8; }
+rect.domain-rect.collision { fill: #e63946; stroke: #e63946; }
+rect.domain-rect.broadcast { fill: #457b9d; stroke: #457b9d; }
+text.domain-label { font-size: 14px; font-weight: bold; fill: #333; pointer-events: none; }
