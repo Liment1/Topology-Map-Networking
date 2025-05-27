@@ -68,7 +68,7 @@
             <h5>Switch</h5>
             <p id="switch-desc">Every port on a switch is in a different collision domain, i.e a switch is a <b>collision domain separator.</b> So messages that come from devices connected to different ports never experience a collision. </p>
             <h5>Router</h5>
-            <p id="router-desc"> A router not only breaks collision domains but also breaks broadcast domains, which means it is both collisions as well as <b>broadcast domain separators.</b></p>
+            <p id="router-desc"> A router not only breaks collision domains but also breaks broadcast domains, which means it is <b>both collisions as well as broadcast domain separators.</b></p>
         </div>
     </div>
     <div id="made-by">made by Welliam</div>
@@ -386,108 +386,108 @@
         drawDomains();
     }
 
-    function drawDomains() {
-        const cd = collisionDomains();
-        const bd = broadcastDomains();
-        document.getElementById('collision-title').textContent = `Collision Domains (Total = ${cd.length})`;
-        document.getElementById('broadcast-title').textContent = `Broadcast Domains (Total = ${bd.length})`;
-        const domains = [...cd, ...bd];
+        function drawDomains() {
+            const cd = collisionDomains();
+            const bd = broadcastDomains();
+            document.getElementById('collision-title').textContent = `Collision Domains (Total = ${cd.length})`;
+            document.getElementById('broadcast-title').textContent = `Broadcast Domains (Total = ${bd.length})`;
+            const domains = [...cd, ...bd];
 
-        // 1) Compute _rectPoints for PC–Switch collision domains
-        domains.forEach(d => {
-            if (d.type === 'collision' && d.members.length === 2) {
-                const [A, B] = d.members;
-                if ((A.type === 'pc' && B.type === 'switch') || (A.type === 'switch' && B.type === 'pc')) {
-                    const pc = A.type === 'pc' ? A : B;
-                    const sw = A.type === 'switch' ? A : B;
-                    d._rectPoints = [
-                        { x: pc.x, y: pc.y },
-                        { x: (pc.x + sw.x) / 2, y: (pc.y + sw.y) / 2 }
-                    ];
+            // 1) Compute _rectPoints for PC–Switch collision domains
+            domains.forEach(d => {
+                if (d.type === 'collision' && d.members.length === 2) {
+                    const [A, B] = d.members;
+                    if ((A.type === 'pc' && B.type === 'switch') || (A.type === 'switch' && B.type === 'pc')) {
+                        const pc = A.type === 'pc' ? A : B;
+                        const sw = A.type === 'switch' ? A : B;
+                        d._rectPoints = [
+                            { x: pc.x, y: pc.y },
+                            { x: (pc.x + sw.x) / 2, y: (pc.y + sw.y) / 2 }
+                        ];
+                    }
                 }
-            }
-        });
-
-        // 2) Render side‐bar lists
-        ['collision','broadcast'].forEach(type => {
-            const list = d3.select(`#${type}-domain-list`);
-            list.selectAll('*').remove();
-            (type === 'collision' ? cd : bd).forEach((d, i) => {
-                const li = list.append('li')
-                    .attr('id', `${type}-domain-${i+1}`)
-                    .classed('selected', d.name === selectedDomain)
-                    .classed('open',     d.name === selectedDomain)
-                    .on('click', () => {
-                        selectedDomain = d.name === selectedDomain ? null : d.name;
-                        draw();
-                    });
-                const arrow = d.name === selectedDomain ? '▼' : '▶';
-                li.html(
-                    `<div class="domain-header"><span class="arrow">${arrow}</span>` +
-                    `<span class="domain-label-text">${d.name} (devices = ${d.members.length})</span></div>` +
-                    `<ul class="member-list" style="display:${d.name === selectedDomain ? 'block' : 'none'}">` +
-                    `${d.members.map(m => `<li>${m.id}</li>`).join('')}</ul>`
-                );
             });
-        });
 
-        // 3) Draw rectangles with highlight/dim and custom points
-        domainGroup.selectAll('rect')
-            .data(domains, d => d.name)
-            .join(
-                enter => enter.append('rect'),
-                update => update,
-                exit   => exit.remove()
-            )
-            .attr('class', d =>
-                `domain-rect ${d.type}` +
-                (selectedDomain === null
-                        ? ''
-                        : d.name === selectedDomain
-                            ? ' selected'
-                            : ' dimmed'
+            // 2) Render side‐bar lists
+            ['collision','broadcast'].forEach(type => {
+                const list = d3.select(`#${type}-domain-list`);
+                list.selectAll('*').remove();
+                (type === 'collision' ? cd : bd).forEach((d, i) => {
+                    const li = list.append('li')
+                        .attr('id', `${type}-domain-${i+1}`)
+                        .classed('selected', d.name === selectedDomain)
+                        .classed('open',     d.name === selectedDomain)
+                        .on('click', () => {
+                            selectedDomain = d.name === selectedDomain ? null : d.name;
+                            draw();
+                        });
+                    const arrow = d.name === selectedDomain ? '▼' : '▶';
+                    li.html(
+                        `<div class="domain-header"><span class="arrow">${arrow}</span>` +
+                        `<span class="domain-label-text">${d.name} (devices = ${d.members.length})</span></div>` +
+                        `<ul class="member-list" style="display:${d.name === selectedDomain ? 'block' : 'none'}">` +
+                        `${d.members.map(m => `<li>${m.id}</li>`).join('')}</ul>`
+                    );
+                });
+            });
+
+            // 3) Draw rectangles with highlight/dim and custom points
+            domainGroup.selectAll('rect')
+                .data(domains, d => d.name)
+                .join(
+                    enter => enter.append('rect'),
+                    update => update,
+                    exit   => exit.remove()
                 )
-            )
-            .each(function(d) {
-                const pts = d._rectPoints
-                    ? d._rectPoints
-                    : d.members.map(n => ({ x: n.x, y: n.y }));
-                const xs = pts.map(p => p.x), ys = pts.map(p => p.y), pad = 30;
-                d3.select(this)
-                    .attr('x', Math.min(...xs) - pad)
-                    .attr('y', Math.min(...ys) - pad)
-                    .attr('width', Math.max(...xs) - Math.min(...xs) + pad * 2)
-                    .attr('height', Math.max(...ys) - Math.min(...ys) + pad * 2);
-            });
+                .attr('class', d =>
+                    `domain-rect ${d.type}` +
+                    (selectedDomain === null
+                            ? ''
+                            : d.name === selectedDomain
+                                ? ' selected'
+                                : ' dimmed'
+                    )
+                )
+                .each(function(d) {
+                    const pts = d._rectPoints
+                        ? d._rectPoints
+                        : d.members.map(n => ({ x: n.x, y: n.y }));
+                    const xs = pts.map(p => p.x), ys = pts.map(p => p.y), pad = 30;
+                    d3.select(this)
+                        .attr('x', Math.min(...xs) - pad)
+                        .attr('y', Math.min(...ys) - pad)
+                        .attr('width', Math.max(...xs) - Math.min(...xs) + pad * 2)
+                        .attr('height', Math.max(...ys) - Math.min(...ys) + pad * 2);
+                });
 
-        // 4) Draw labels with highlight/dim and offset duplicates
-        const labelCount = {};
-        domainGroup.selectAll('text.domain-label')
-            .data(domains, d => d.name)
-            .join(
-                enter => enter.append('text'),
-                update => update,
-                exit   => exit.remove()
-            )
-            .attr('class', d =>
-                d.name === selectedDomain
-                    ? 'domain-label selected'
-                    : (selectedDomain === null
-                        ? 'domain-label'
-                        : 'domain-label dimmed')
-            )
-            .each(function(d) {
-                const baseX = Math.max(...d.members.map(n => n.x)) + 20;
-                const baseY = Math.max(...d.members.map(n => n.y)) + 20;
-                const key = `${Math.round(baseX)},${Math.round(baseY)}`;
-                const count = (labelCount[key] = (labelCount[key] || 0) + 1);
-                const offset = (count - 1) * 14;
-                d3.select(this)
-                    .attr('x', baseX + offset)
-                    .attr('y', baseY + offset)
-                    .text(d.name);
-            });
-    }
+            // 4) Draw labels with highlight/dim and offset duplicates
+            const labelCount = {};
+            domainGroup.selectAll('text.domain-label')
+                .data(domains, d => d.name)
+                .join(
+                    enter => enter.append('text'),
+                    update => update,
+                    exit   => exit.remove()
+                )
+                .attr('class', d =>
+                    d.name === selectedDomain
+                        ? 'domain-label selected'
+                        : (selectedDomain === null
+                            ? 'domain-label'
+                            : 'domain-label dimmed')
+                )
+                .each(function(d) {
+                    const baseX = Math.max(...d.members.map(n => n.x)) + 20;
+                    const baseY = Math.max(...d.members.map(n => n.y)) + 20;
+                    const key = `${Math.round(baseX)},${Math.round(baseY)}`;
+                    const count = (labelCount[key] = (labelCount[key] || 0) + 1);
+                    const offset = (count - 1) * 14;
+                    d3.select(this)
+                        .attr('x', baseX + offset)
+                        .attr('y', baseY + offset)
+                        .text(d.name);
+                });
+        }
 
     document.getElementById('dev-type').addEventListener('change',refreshTargets);
     document.getElementById('add-btn').addEventListener('click', () => {
